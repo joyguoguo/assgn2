@@ -76,10 +76,25 @@ void kernel_trap(struct ktrapframe *ktf) {
     } else {
         if ((exception_code == LoadPageFault || exception_code == StorePageFault) && r_stval() < USERVM_TOP) {
             struct proc *p = curr_proc();
+            struct mm *mm = p ? p->mm : NULL;
+
+            if (mm && holding(&mm->lock)) {
+                pte_t *pte = walk(mm, r_stval(), 0);
+                if (pte && (*pte & PTE_V) && (*pte & PTE_U) &&
+                    ((exception_code == LoadPageFault && (*pte & PTE_R)) ||
+                     (exception_code == StorePageFault && (*pte & PTE_W)))) {
+                    *pte |= PTE_A;
+                    if (exception_code == StorePageFault)
+                        *pte |= PTE_D;
+                    sfence_vma();
+                    goto kernel_trap_handled;
+                }
+            }
+
             w_sstatus(r_sstatus() & ~SSTATUS_SUM);
             mycpu()->inkernel_trap--;
-            if (p && p->mm && holding(&p->mm->lock))
-                release(&p->mm->lock);
+            if (mm && holding(&mm->lock))
+                release(&mm->lock);
             exit(-9);
         }
 
@@ -87,6 +102,7 @@ void kernel_trap(struct ktrapframe *ktf) {
         goto kernel_panic;
     }
 
+kernel_trap_handled:
     assert(!intr_get());
     assert(mycpu()->inkernel_trap == 1);
 
