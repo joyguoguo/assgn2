@@ -74,6 +74,15 @@ void kernel_trap(struct ktrapframe *ktf) {
             goto kernel_panic;
         }
     } else {
+        if ((exception_code == LoadPageFault || exception_code == StorePageFault) && r_stval() < USERVM_TOP) {
+            struct proc *p = curr_proc();
+            w_sstatus(r_sstatus() & ~SSTATUS_SUM);
+            mycpu()->inkernel_trap--;
+            if (p && p->mm && holding(&p->mm->lock))
+                release(&p->mm->lock);
+            exit(-9);
+        }
+
         // kernel exception, unexpected.
         goto kernel_panic;
     }

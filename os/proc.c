@@ -125,6 +125,7 @@ found:
     memset((void *)p->trapframe, 0, PGSIZE);
     p->context.ra = (uint64)first_sched_ret;
     p->context.sp = p->kstack + KERNEL_STACK_SIZE;
+    p->context.satp = MAKE_SATP(KVA_TO_PA(p->mm->pgt));
 
     assert(holding(&p->lock));
 

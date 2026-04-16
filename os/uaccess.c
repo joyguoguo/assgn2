@@ -4,38 +4,33 @@
 #include "string.h"
 
 static int access_ok(struct mm* mm, uint64 addr, uint64 len) {
-	// Assignment 2: Your code here
-	return 0;
+    (void)mm;
+
+    if (addr > USERVM_TOP)
+        return 0;
+    if (len > USERVM_TOP)
+        return 0;
+    return addr <= USERVM_TOP - len;
 } 
 
 static void begin_user_access() {
-	// Assignment 2: Your code here
+    w_sstatus(r_sstatus() | SSTATUS_SUM);
 }
 
 static void end_user_access() {
-	// Assignment 2: Your code here
+    w_sstatus(r_sstatus() & ~SSTATUS_SUM);
 }
 
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.
 // Return 0 on success, -1 on error.
 int copy_to_user(struct mm *mm, uint64 __user dstva, char *src, uint64 len) {
-    uint64 n, va0, pa0;
+    if (!access_ok(mm, dstva, len))
+        return -EINVAL;
 
-    while (len > 0) {
-        va0 = PGROUNDDOWN(dstva);
-        pa0 = walkaddr(mm, va0);
-        if (pa0 == 0)
-            return -EINVAL;
-        n = PGSIZE - (dstva - va0);
-        if (n > len)
-            n = len;
-        memmove((void *)(PA_TO_KVA(pa0) + (dstva - va0)), src, n);
-
-        len -= n;
-        src += n;
-        dstva = va0 + PGSIZE;
-    }
+    begin_user_access();
+    memmove((void *)dstva, src, len);
+    end_user_access();
     return 0;
 }
 
@@ -43,22 +38,12 @@ int copy_to_user(struct mm *mm, uint64 __user dstva, char *src, uint64 len) {
 // Copy len bytes to dst from virtual address srcva in a given page table.
 // Return 0 on success, -1 on error.
 int copy_from_user(struct mm *mm, char *dst, uint64 __user srcva, uint64 len) {
-    uint64 n, va0, pa0;
+    if (!access_ok(mm, srcva, len))
+        return -EINVAL;
 
-    while (len > 0) {
-        va0 = PGROUNDDOWN(srcva);
-        pa0 = walkaddr(mm, va0);
-        if (pa0 == 0)
-            return -EINVAL;
-        n = PGSIZE - (srcva - va0);
-        if (n > len)
-            n = len;
-        memmove(dst, (void *)(PA_TO_KVA(pa0) + (srcva - va0)), n);
-
-        len -= n;
-        dst += n;
-        srcva = va0 + PGSIZE;
-    }
+    begin_user_access();
+    memmove(dst, (void *)srcva, len);
+    end_user_access();
     return 0;
 }
 
